@@ -1,60 +1,75 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const helper = require('./src/helper');
+const mongoose = require('mongoose');
+
+mongoose
+	.connect(
+		`mongodb+srv://${process.env.LOGIN}:${process.env.PASSWORD}@cluster0.ghpfy.mongodb.net/${process.env.DBNAME}?retryWrites=true&w=majority`,
+		{
+			useNewUrlParser: true,
+			useUnifiedTopology: true,
+			useFindAndModify: false,
+		}
+	)
+	.then(() => {
+		console.log('database connected');
+	})
+	.catch(err => console.log(err));
 
 const bot = new TelegramBot(process.env.TOKEN, {
 	polling: true,
 });
 
-let chats = {};
-
 bot.on('message', async msg => {
 	try {
 		const text = msg.text;
 		const chatId = msg.chat.id;
+		let datasFromChat = await helper.mongooseData.findById(chatId);
 
-		if (!chats[chatId]) {
-			chats[chatId] = {
-				list: [],
-				currentMessageId: 0,
-				previousMessageId: 0,
-			};
+		if (!datasFromChat) {
+			datasFromChat = await helper.mongooseData.newChat(chatId);
 		}
-
 		if (text === '/start') {
 			return await bot
 				.sendMessage(chatId, helper.html, {
 					parse_mode: 'HTML',
 					reply_markup: {
 						inline_keyboard: helper.keyboard_list(
-							chats[chatId].list
+							datasFromChat.list
 						),
 					},
 				})
-				.then(res => {
-					chats[chatId].currentMessageId = res.message_id;
+				.then(async res => {
+					datasFromChat = await helper.mongooseData.findOneAndUpdate(
+						chatId,
+						{ currentMessageId: res.message_id }
+					);
 					bot.deleteMessage(chatId, msg.message_id);
-					if (chats[chatId].currentMessageId !== 0) {
+					if (datasFromChat.currentMessageId !== 0) {
 						bot.deleteMessage(
 							chatId,
-							chats[chatId].previousMessageId
+							datasFromChat.previousMessageId
 						);
 					}
-					chats[chatId].previousMessageId = res.message_id;
+					await helper.mongooseData.findOneAndUpdate(chatId, {
+						previousMessageId: res.message_id,
+					});
 				});
 		}
 
 		if (typeof text === 'string') {
-			chats[chatId].list.push(text);
-			console.log(chats);
+			datasFromChat.list.push(text);
+			await helper.mongooseData.findOneAndUpdate(chatId, {
+				list: datasFromChat.list,
+			});
 			bot.deleteMessage(chatId, msg.message_id);
-
 			return await bot.editMessageText(helper.html, {
 				chat_id: chatId,
-				message_id: chats[chatId].currentMessageId,
+				message_id: datasFromChat.currentMessageId,
 				parse_mode: 'HTML',
 				reply_markup: {
-					inline_keyboard: helper.keyboard_list(chats[chatId].list),
+					inline_keyboard: helper.keyboard_list(datasFromChat.list),
 				},
 			});
 		}
@@ -77,18 +92,26 @@ bot.on('message', async msg => {
 					parse_mode: 'HTML',
 					reply_markup: {
 						inline_keyboard: helper.keyboard_list(
-							chats[chatId].list
+							datasFromChat.list
 						),
 					},
 				})
-				.then(res => (chats[chatId].currentMessageId = res.message_id));
+				.then(
+					async res =>
+						await helper.mongooseData.findOneAndUpdate(chatId, {
+							currentMessageId: res.message_id,
+						})
+				);
 		}
 	}
 });
 
 bot.on('callback_query', async query => {
 	const chatId = query.message.chat.id;
-	chats[chatId].list = chats[chatId].list.filter(text => text !== query.data);
+	let datasFromChat = await helper.mongooseData.findById(chatId);
+	datasFromChat = await helper.mongooseData.findOneAndUpdate(chatId, {
+		list: datasFromChat.list.filter(text => text !== query.data),
+	});
 
 	await bot.answerCallbackQuery(query.id, `${query.data} удалено`);
 
@@ -97,9 +120,7 @@ bot.on('callback_query', async query => {
 		message_id: query.message.message_id,
 		parse_mode: 'HTML',
 		reply_markup: {
-			inline_keyboard: helper.keyboard_list(chats[chatId].list),
+			inline_keyboard: helper.keyboard_list(datasFromChat.list),
 		},
 	});
 });
-
-bot.on('getUpdates', t => console.log(t));
