@@ -6,7 +6,9 @@ module.exports = {
 			return [{ text: text, callback_data: text }];
 		});
 	},
-	html: `<u><strong>Список:</strong></u>`,
+	html(text) {
+		return `<u><strong>Список ${text}:</strong></u>`;
+	},
 	mongooseData: {
 		async findById(id) {
 			return await TelegramChatIds.findOne({ id });
@@ -14,9 +16,12 @@ module.exports = {
 		async newChat(chatId) {
 			const newChatId = new TelegramChatIds({
 				id: chatId,
-				list: [],
+				shoppingList: [],
+				toDoList: [],
 				currentMessageId: 0,
 				previousMessageId: 0,
+				secondMessageId: 0,
+				currentList: '🛒 Покупки',
 			});
 			await newChatId.save();
 			return newChatId;
