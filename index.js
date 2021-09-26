@@ -73,7 +73,7 @@ const start = () => {
 						});
 						bot.sendMessage(
 							chatId,
-							`Сообщения добавятся в список. Кликните, чтобы удалить.`,
+							`Сообщения добавятся в список. Ограничение по длине сообщений. Кликните, чтобы удалить.`,
 							{
 								reply_markup: {
 									keyboard: [['🛒 Покупки', '📋 Дела']],
@@ -92,6 +92,9 @@ const start = () => {
 					});
 			}
 			if (typeof text === 'string') {
+				if (helper.byteCount(text) >= 64) {
+					return bot.deleteMessage(chatId, msg.message_id);
+				}
 				if (text === '🛒 Покупки' || text === '📋 Дела') {
 					await helper.mongooseData.findOneAndUpdate(chatId, {
 						currentList: text,

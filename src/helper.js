@@ -9,6 +9,9 @@ module.exports = {
 	html(text) {
 		return `<u><strong>Список ${text}:</strong></u>`;
 	},
+	byteCount(string) {
+		return encodeURI(string).split(/%..|./).length - 1;
+	},
 	mongooseData: {
 		async findById(id) {
 			return await TelegramChatIds.findOne({ id });
